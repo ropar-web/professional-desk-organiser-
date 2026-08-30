@@ -7,6 +7,49 @@ from typing import Dict, Tuple
 import cadquery as cq
 
 
+FONT_PATH_CANDIDATES = {
+    "DejaVu Sans": [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    ],
+    "Liberation Sans": [
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ],
+    "Lato": [
+        "/usr/share/fonts/truetype/lato/Lato-Regular.ttf",
+        "/usr/share/fonts/lato/Lato-Regular.ttf",
+    ],
+}
+
+
+def _resolve_font_path(font: str) -> str | None:
+    """Return an installed TTF path for reliable CadQuery text on Linux.
+
+    CadQuery/OCP font-name discovery can return a null FontName on headless
+    Streamlit Linux hosts even when the font is installed. Passing fontPath
+    bypasses that discovery layer and is much more reliable.
+    """
+    for candidate in FONT_PATH_CANDIDATES.get(font, []):
+        if Path(candidate).is_file():
+            return candidate
+
+    # Always fall back to DejaVu Sans if the selected family is unavailable.
+    for candidate in FONT_PATH_CANDIDATES["DejaVu Sans"]:
+        if Path(candidate).is_file():
+            return candidate
+    return None
+
+
+def _cq_text(text: str, size: float, depth: float, font: str) -> cq.Workplane:
+    font_path = _resolve_font_path(font)
+    kwargs = dict(halign="center", valign="center", combine=False)
+    if font_path:
+        return cq.Workplane("XY").text(text, size, depth, fontPath=font_path, **kwargs)
+    # Last-resort fallback for non-Linux/local installs.
+    return cq.Workplane("XY").text(text, size, depth, font=font or "Arial", **kwargs)
+
+
 @dataclass
 class OrganizerConfig:
     name: str = "Miss Parker"
@@ -202,7 +245,7 @@ def _fitted_text(text: str, max_width: float, max_height: float, depth: float, f
     for _ in range(14):
         mid = (lo + hi) / 2
         try:
-            candidate = cq.Workplane("XY").text(text, mid, depth, font=font, halign="center", valign="center")
+            candidate = _cq_text(text, mid, depth, font)
             bb = candidate.val().BoundingBox()
             if bb.xlen <= max_width and bb.ylen <= max_height:
                 best = candidate
@@ -212,7 +255,7 @@ def _fitted_text(text: str, max_width: float, max_height: float, depth: float, f
         except Exception:
             hi = mid
     if best is None:
-        best = cq.Workplane("XY").text(text, max(3.0, max_height * 0.45), depth, font=font, halign="center", valign="center")
+        best = _cq_text(text, max(3.0, max_height * 0.45), depth, font)
     return best
 
 

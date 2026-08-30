@@ -3,3 +3,7 @@ libx11-6
 libxext6
 libxrender1
 libsm6
+fontconfig
+fonts-dejavu-core
+fonts-liberation
+fonts-lato
